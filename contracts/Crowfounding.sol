@@ -5,11 +5,16 @@
      // Default: Opened (1)
      enum State { Closed, Opened }
 
+     struct Contribution {
+         address contributor;
+         uint value;
+     }
+
      // Allow multiple projects
      Project[] public projects;
 
      // Contributions to project
-     mapping(string => uint) projectFounds;
+     mapping(string => Contribution[]) contributions;
 
      struct Project {
         string id;
@@ -22,7 +27,7 @@
         address owner;
      }
 
-     Project public project;
+    //  Project public project;
      
      // Events
      event ProjectFunded(
@@ -34,6 +39,12 @@
      event ProjectStateChanged(
          string id,
          State newState
+     );
+     event ProjectCreated(
+         string id,
+         string name,
+         string description,
+         uint foundraisingGoal
      );
 
      // Handle errors
@@ -54,16 +65,16 @@
      }*/
 
      // Modifiers. Restrictions!
-     modifier isAuthor() {
+     modifier isAuthor(uint projectIndex) {
          require(
-             project.author == msg.sender,
+             projects[projectIndex].author == msg.sender,
              "Only the author can change the project state"
          );
          _;
      }
-      modifier isNotAuthor() {
+      modifier isNotAuthor(uint projectIndex) {
          require(
-             project.author != msg.sender,
+             projects[projectIndex].author != msg.sender,
              "The author can not add founds"
          );
          _;
@@ -72,7 +83,9 @@
      /**
       * Method available for non-authors
       */
-     function fundProject() public payable isNotAuthor {
+     function fundProject(uint projectIndex) public payable isNotAuthor(projectIndex) {
+         // Get project by index
+         Project memory project = projects[projectIndex];
          // Check if the state is opened
          require(project.state == State.Opened, "The project is Closed.");
          require(msg.value > 0, "Amount must be greather than 0.");
@@ -81,25 +94,36 @@
          // Accumulate founds
          project.founds += msg.value;
          
+         projects[projectIndex] = project;
+
+         // Mapping
+         contributions[project.id].push(Contribution(msg.sender, msg.value));
+         
          // Shoot event, new project!
          emit ProjectFunded(msg.sender, msg.value, project.id, project.name);
      }
      /**
       * The author can change the status
       */
-     function changeProjectState(State newState) public isAuthor {
+     function changeProjectState(State newState, uint projectIndex) public isAuthor(projectIndex) {
+         Project memory project = projects[projectIndex];
          // Avoid invalid states
          require(newState == State.Opened || newState == State.Closed, "Invalid state");
          // Avoid unnecessary change
          require(project.state != newState, "New state must be different");
 
          project.state = newState;
+
+         projects[projectIndex] = project;
+
          // Shoot event, updated state!
          emit ProjectStateChanged(project.id, newState);
      }
 
-     function createProject() public {
-         // TODO: Implement method for create multiple projects. 
-         // Use Project[] array and mapping.
+     function createProject(string calldata id, string calldata name, string calldata description, uint foundraisingGoal) public {
+         require(foundraisingGoal > 0, "Foundraising goal must be greater than 0");
+         Project memory project = Project(id, name, description, State.Opened, 0, foundraisingGoal, payable(msg.sender), msg.sender);
+         projects.push(project);
+         emit ProjectCreated(id, name, description, foundraisingGoal);
      }
  }
